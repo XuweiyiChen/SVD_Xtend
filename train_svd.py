@@ -1035,7 +1035,7 @@ def main():
 
                 # Get the text embedding for conditioning.
                 encoder_hidden_states = encode_image(
-                    pixel_values[:, 0, :, :, :].float())
+                    pixel_values[:, -1, :, :, :].float())
 
                 # Here I input a fixed numerical value for 'motion_bucket_id', which is not reasonable.
                 # However, I am unable to fully align with the calculation method of the motion score,
