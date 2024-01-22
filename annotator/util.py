@@ -3,7 +3,8 @@ import cv2
 import os
 
 
-annotator_ckpts_path = os.path.join(os.path.dirname(__file__), "ckpts")
+# annotator_ckpts_path = os.path.join(os.path.dirname(__file__), "ckpts")
+annotator_ckpts_path = "/nfs/turbo/coe-chaijy/pre-trained-weights/ControlNet/models"
 
 
 def HWC3(x):
