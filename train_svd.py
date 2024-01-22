@@ -1479,15 +1479,13 @@ def main():
                                 restored_image = np.stack(
                                     [augmented_scratch_last_image] * 3, axis=2
                                 )
-                                last_augmented_scratch_frame = get_hed_augmented(
-                                    model_hed, restored_image
-                                )
+                                resized_image = np.transpose(restored_image, (2, 0, 1))
                                 video_frames = pipeline(
                                     first_image=transform_to_pil(first_frame).resize(
                                         (args.width, args.height)
                                     ),
                                     last_image=transform_to_pil(
-                                        torch.from_numpy(last_augmented_scratch_frame)
+                                        torch.from_numpy(resized_image)
                                     ).resize((args.width, args.height)),
                                     height=args.height,
                                     width=args.width,
