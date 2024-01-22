@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
 import os
-
+from PIL import Image
 
 # annotator_ckpts_path = os.path.join(os.path.dirname(__file__), "ckpts")
 annotator_ckpts_path = "/nfs/turbo/coe-chaijy/pre-trained-weights/ControlNet/models"
@@ -27,7 +27,10 @@ def HWC3(x):
 
 
 def resize_image(input_image, resolution):
+    # resized_image_pil = Image.fromarray(input_image.astype(np.uint8))
+    # resized_image_pil.save("saved_image5.png")
     H, W, C = input_image.shape
+    print("H W C: ", H, W, C)
     H = float(H)
     W = float(W)
     k = float(resolution) / min(H, W)
@@ -40,4 +43,7 @@ def resize_image(input_image, resolution):
         (W, H),
         interpolation=cv2.INTER_LANCZOS4 if k > 1 else cv2.INTER_AREA,
     )
+    # resized_image_pil = Image.fromarray(img.astype(np.uint8))
+    # resized_image_pil.save("saved_image6.png")
+
     return img

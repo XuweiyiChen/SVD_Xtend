@@ -31,6 +31,7 @@ import accelerate
 import numpy as np
 import PIL
 import h5py
+from annotator.hed import HEDdetector
 from PIL import Image, ImageDraw
 from torchvision.transforms import ToPILImage
 import torch
@@ -48,6 +49,7 @@ from transformers import CLIPImageProcessor, CLIPVisionModelWithProjection
 from einops import rearrange
 from diffusers.utils.torch_utils import randn_tensor
 import diffusers
+from imgaug import augmenters as iaa
 from pipeline.stable_video_diffusion_pipeline import StableVideoDiffusionPipeline
 from diffusers.models.lora import LoRALinearLayer
 from diffusers import (
@@ -60,7 +62,7 @@ from diffusers.optimization import get_scheduler
 from diffusers.training_utils import EMAModel
 from diffusers.utils import check_min_version, deprecate, is_wandb_available, load_image
 from diffusers.utils.import_utils import is_xformers_available
-
+from annotator.util import resize_image, HWC3
 from torch.utils.data import Dataset
 
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
@@ -267,7 +269,7 @@ class DummyDataset(Dataset):
                 img_tensor = img_tensor.permute(2, 0, 1)
             elif self.channels == 1:
                 img_tensor = img_tensor.mean(dim=2, keepdim=True)
-            pixel_values[i] = img_tensor
+            pixel_values[i, :, :, :] = img_tensor
         condition = pixel_values + randn_tensor(pixel_values.shape) * 0.2
         return {
             "pixel_values": pixel_values,
@@ -425,6 +427,47 @@ def export_to_gif(frames, output_gif_path, fps):
         duration=500,
         loop=0,
     )
+
+
+def load_image2hed():
+    model_hed = HEDdetector()
+    return model_hed
+
+
+def get_hed_augmented(model_hed, img):
+    img = resize_image(HWC3(img), 320)
+    result = model_hed(img)
+    _, bw_image = cv2.threshold(result, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    inverted_bw_image = 255 - bw_image
+    image_array = inverted_bw_image
+    # 1. Random Threshold
+    thresh_value = random.randint(0, 255)
+    _, thresholded_image = cv2.threshold(
+        image_array, thresh_value, 255, cv2.THRESH_BINARY
+    )
+
+    # 2. Randomly Masking Out Scribbles
+    # def apply_random_mask(image, percentage):
+    #     mask = np.random.binomial(1, percentage, size=image.shape).astype(np.uint8)
+    #     return image * mask
+
+    percentage_to_mask = random.uniform(
+        0, 0.2
+    )  # Randomly determine the percentage to mask out
+    # masked_image = apply_random_mask(image_array, percentage_to_mask)
+
+    # Now, let's create a sequence of augmentations
+    seq = iaa.Sequential(
+        [
+            # iaa.Crop(percent=(0, 0.1)),  # random crops
+            iaa.Sometimes(
+                0.5, iaa.CoarseDropout(p=percentage_to_mask, size_percent=0.02)
+            ),  # Randomly mask out
+            iaa.AdditiveGaussianNoise(loc=0, scale=(0.0, 0.05 * 255), per_channel=0.5),
+        ]
+    )
+    augmented_image = seq.augment_image(image_array)
+    return augmented_image
 
 
 def tensor_to_vae_latent(t, vae):
@@ -843,6 +886,7 @@ def main():
         low_cpu_mem_usage=True,
         variant="fp16",
     )
+    model_hed = load_image2hed()
 
     # Freeze vae and image_encoder
     vae.requires_grad_(False)
@@ -1222,8 +1266,29 @@ def main():
                 inp_noisy_latents = noisy_latents / ((sigmas**2 + 1) ** 0.5)
 
                 # Get the text embedding for conditioning.
+                scaled_pixel_values = np.clip(
+                    pixel_values[:, -1, :, :, :].squeeze(0).detach().cpu().numpy()
+                    * 255,
+                    0,
+                    255,
+                ).astype(np.uint8)
+                # Assuming scaled_pixel_values is of shape [channels, height, width]
+                scaled_pixel_values = scaled_pixel_values.transpose(
+                    1, 2, 0
+                )  # Reorder to [height, width, channels]
+                augmented_scratch_last_image = get_hed_augmented(
+                    model_hed, scaled_pixel_values
+                )
+                restored_image = np.stack([augmented_scratch_last_image] * 3, axis=2)
+                # restored_image = np.transpose(restored_image, (1, 2, 0))
+                # resized_image = cv2.resize(restored_image, (320, 512))
+                resized_image = np.transpose(restored_image, (2, 0, 1))
+                restored_image = resized_image.astype(np.float32) / 255.0
+                augmented_scratch_last_image = torch.from_numpy(restored_image).to(
+                    pixel_values.device
+                )
                 encoder_hidden_states = encode_image(
-                    pixel_values[:, -1, :, :, :].float()
+                    augmented_scratch_last_image.unsqueeze(0).float()
                 )
 
                 # Here I input a fixed numerical value for 'motion_bucket_id', which is not reasonable.
@@ -1397,13 +1462,32 @@ def main():
                             # for val_img_idx in range(args.num_validation_images):
                             for val_img_idx, val_sample in enumerate(val_dataset):
                                 initial_image = val_sample["pixel_values"]
-                                # text_prompt = val_sample["text_prompt"]
+                                first_frame = initial_image[0, :, :, :].squeeze(0)
+                                last_frame = initial_image[-1, :, :, :].squeeze(0)
+                                scaled_pixel_values = np.clip(
+                                    last_frame.detach().cpu().numpy() * 255,
+                                    0,
+                                    255,
+                                ).astype(np.uint8)
+                                # Assuming scaled_pixel_values is of shape [channels, height, width]
+                                scaled_pixel_values = scaled_pixel_values.transpose(
+                                    1, 2, 0
+                                )  # Reorder to [height, width, channels]
+                                augmented_scratch_last_image = get_hed_augmented(
+                                    model_hed, scaled_pixel_values
+                                )
+                                restored_image = np.stack(
+                                    [augmented_scratch_last_image] * 3, axis=2
+                                )
+                                last_augmented_scratch_frame = get_hed_augmented(
+                                    model_hed, restored_image
+                                )
                                 video_frames = pipeline(
-                                    first_image=transform_to_pil(
-                                        initial_image[0, :, :, :].squeeze(0)
-                                    ).resize((args.width, args.height)),
+                                    first_image=transform_to_pil(first_frame).resize(
+                                        (args.width, args.height)
+                                    ),
                                     last_image=transform_to_pil(
-                                        initial_image[-1, :, :, :].squeeze(0)
+                                        torch.from_numpy(last_augmented_scratch_frame)
                                     ).resize((args.width, args.height)),
                                     height=args.height,
                                     width=args.width,
