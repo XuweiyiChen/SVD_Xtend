@@ -1,15 +1,15 @@
 #!/bin/bash
 
-#SBATCH --account=fouhey2
+#SBATCH --account=chaijy2
 #SBATCH --partition=spgpu
-#SBATCH --time=48:00:00  # Adjusted to 24 hours, change as needed
+#SBATCH --time=48:00:00  # Adjusted to 48 hours, change as needed
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=8  # Increased CPU count for parallel processing
-#SBATCH --mem=64G  # Adjust as per your job's requirement
-#SBATCH --gres=gpu:2  # Adjust based on GPU needs
-#SBATCH --job-name="svd1"
-#SBATCH --output=/scratch/jjparkcv_root/jjparkcv1/xuweic/SVD_Xtend/train_1_syn.log
+#SBATCH --cpus-per-task=4  # Increased CPU count for parallel processing
+#SBATCH --mem=32G  # Adjust as per your job's requirement
+#SBATCH --gres=gpu:1  # Adjust based on GPU needs
+#SBATCH --job-name="svd5"
+#SBATCH --output=/scratch/jjparkcv_root/jjparkcv1/xuweic/SVD_Xtend/train_5_syn.log
 #SBATCH --mail-type=BEGIN,END,FAIL  # Removed BEGIN and REQUEUE notifications
 
 accelerate launch train_svd.py \

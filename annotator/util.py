@@ -30,7 +30,7 @@ def resize_image(input_image, resolution):
     # resized_image_pil = Image.fromarray(input_image.astype(np.uint8))
     # resized_image_pil.save("saved_image5.png")
     H, W, C = input_image.shape
-    print("H W C: ", H, W, C)
+    # print("H W C: ", H, W, C)
     H = float(H)
     W = float(W)
     k = float(resolution) / min(H, W)

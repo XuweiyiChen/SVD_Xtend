@@ -458,7 +458,7 @@ def get_hed_augmented(model_hed, img):
     # Now, let's create a sequence of augmentations
     seq = iaa.Sequential(
         [
-            # iaa.Crop(percent=(0, 0.1)),  # random crops
+            iaa.Crop(percent=(0, 0.05)),  # random crops
             iaa.Sometimes(
                 0.5, iaa.CoarseDropout(p=percentage_to_mask, size_percent=0.02)
             ),  # Randomly mask out
@@ -808,13 +808,13 @@ def main():
     accelerator_project_config = ProjectConfiguration(
         project_dir=args.output_dir, logging_dir=logging_dir
     )
-    ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
+    # ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
     accelerator = Accelerator(
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         mixed_precision=args.mixed_precision,
         log_with=args.report_to,
         project_config=accelerator_project_config,
-        kwargs_handlers=[ddp_kwargs]
+        # kwargs_handlers=[ddp_kwargs]
     )
 
     generator = torch.Generator(device=accelerator.device).manual_seed(args.seed)
@@ -1040,7 +1040,7 @@ def main():
 
     train_dataset = DummyDataset(
         hdf5_path=args.dataset_json_path,
-        actions=["lift_ph"],
+        actions=["lift_ph", "can_ph", "square_ph"],
         num_samples=10000,
         num_frames=args.num_frames,
     )
@@ -1149,12 +1149,12 @@ def main():
     ):
         add_time_ids = [fps, motion_bucket_id, noise_aug_strength]
 
-        passed_add_embed_dim = unet.module.config.addition_time_embed_dim * \
-            len(add_time_ids)
-        expected_add_embed_dim = unet.module.add_embedding.linear_1.in_features
+        # passed_add_embed_dim = unet.module.config.addition_time_embed_dim * \
+        #     len(add_time_ids)
+        # expected_add_embed_dim = unet.module.add_embedding.linear_1.in_features
 
-        # passed_add_embed_dim = unet.config.addition_time_embed_dim * len(add_time_ids)
-        # expected_add_embed_dim = unet.add_embedding.linear_1.in_features
+        passed_add_embed_dim = unet.config.addition_time_embed_dim * len(add_time_ids)
+        expected_add_embed_dim = unet.add_embedding.linear_1.in_features
         if expected_add_embed_dim != passed_add_embed_dim:
             raise ValueError(
                 f"Model expects an added time embedding vector of length {expected_add_embed_dim}, but a vector of {passed_add_embed_dim} was created. The model has an incorrect config. Please check `unet.config.time_embedding_type` and `text_encoder_2.config.projection_dim`."
@@ -1479,6 +1479,18 @@ def main():
                                     [augmented_scratch_last_image] * 3, axis=2
                                 )
                                 resized_image = np.transpose(restored_image, (2, 0, 1))
+                                val_save_dir = os.path.join(
+                                    args.out_dir_val, f"step_{global_step}"
+                                )
+                                os.makedirs(val_save_dir, exist_ok=True)
+                                save_image_pil = Image.fromarray(
+                                    restored_image.astype(np.uint8)
+                                )
+                                out_png_file = os.path.join(
+                                    val_save_dir,
+                                    f"val_img_{val_img_idx}.png",
+                                )
+                                save_image_pil.save(out_png_file)
                                 video_frames = pipeline(
                                     first_image=transform_to_pil(first_frame).resize(
                                         (args.width, args.height)
@@ -1496,10 +1508,10 @@ def main():
                                     # generator=generator,
                                 ).frames[0]
 
-                                val_save_dir = os.path.join(
-                                    args.out_dir_val, f"step_{global_step}"
-                                )
-                                os.makedirs(val_save_dir, exist_ok=True)
+                                # val_save_dir = os.path.join(
+                                #     args.out_dir_val, f"step_{global_step}"
+                                # )
+                                # os.makedirs(val_save_dir, exist_ok=True)
 
                                 out_file = os.path.join(
                                     val_save_dir,
