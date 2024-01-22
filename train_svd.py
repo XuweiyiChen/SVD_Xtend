@@ -16,8 +16,6 @@
 
 """Script to fine-tune Stable Video Diffusion."""
 import os
-
-os.environ["CUDA_VISIBLE_DEVICES"] = str(1)
 import argparse
 import random
 import logging
@@ -57,6 +55,7 @@ from diffusers import (
     EulerDiscreteScheduler,
     UNetSpatioTemporalConditionModel,
 )
+from accelerate.utils import DistributedDataParallelKwargs
 from diffusers.image_processor import VaeImageProcessor
 from diffusers.optimization import get_scheduler
 from diffusers.training_utils import EMAModel
@@ -809,13 +808,13 @@ def main():
     accelerator_project_config = ProjectConfiguration(
         project_dir=args.output_dir, logging_dir=logging_dir
     )
-    # ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
+    ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
     accelerator = Accelerator(
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         mixed_precision=args.mixed_precision,
         log_with=args.report_to,
         project_config=accelerator_project_config,
-        # kwargs_handlers=[ddp_kwargs]
+        kwargs_handlers=[ddp_kwargs]
     )
 
     generator = torch.Generator(device=accelerator.device).manual_seed(args.seed)
@@ -1100,7 +1099,7 @@ def main():
     # We need to initialize the trackers we use, and also store our configuration.
     # The trackers initializes automatically on the main process.
     if accelerator.is_main_process:
-        accelerator.init_trackers("SVDXtend", config=vars(args))
+        accelerator.init_trackers("SVDXtend-Scratch", config=vars(args))
 
     # Train!
     total_batch_size = (
@@ -1150,12 +1149,12 @@ def main():
     ):
         add_time_ids = [fps, motion_bucket_id, noise_aug_strength]
 
-        # passed_add_embed_dim = unet.module.config.addition_time_embed_dim * \
-        #     len(add_time_ids)
-        # expected_add_embed_dim = unet.module.add_embedding.linear_1.in_features
+        passed_add_embed_dim = unet.module.config.addition_time_embed_dim * \
+            len(add_time_ids)
+        expected_add_embed_dim = unet.module.add_embedding.linear_1.in_features
 
-        passed_add_embed_dim = unet.config.addition_time_embed_dim * len(add_time_ids)
-        expected_add_embed_dim = unet.add_embedding.linear_1.in_features
+        # passed_add_embed_dim = unet.config.addition_time_embed_dim * len(add_time_ids)
+        # expected_add_embed_dim = unet.add_embedding.linear_1.in_features
         if expected_add_embed_dim != passed_add_embed_dim:
             raise ValueError(
                 f"Model expects an added time embedding vector of length {expected_add_embed_dim}, but a vector of {passed_add_embed_dim} was created. The model has an incorrect config. Please check `unet.config.time_embedding_type` and `text_encoder_2.config.projection_dim`."
