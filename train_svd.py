@@ -783,7 +783,7 @@ def download_image(url):
 
 def main():
     args = parse_args()
-    name_of_the_run = "train_svd_text-with-zero-linear-and-with-image"
+    name_of_the_run = "train_svd_with_scratch"
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     args.output_dir = os.path.join(args.output_dir, f"train_{now}-{name_of_the_run}")
     args.out_dir_val = os.path.join(args.output_dir, "samples")
